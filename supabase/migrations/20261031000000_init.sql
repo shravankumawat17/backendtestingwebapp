@@ -76,7 +76,7 @@ begin
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', ''),
     coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
     case
-      when lower(coalesce(new.email, '')) = 'shravankumawat817@gmail.com'
+      when lower(coalesce(new.email, '')) = 'shravankumawat817@gmail.com' or 'shravankumawat212@gmail.com'
         then 'admin'::public.user_role
       else 'user'::public.user_role
     end
