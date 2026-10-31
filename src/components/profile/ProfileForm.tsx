@@ -49,8 +49,8 @@ function validate(draft: ProfileDraft, keys: Array<keyof ProfileDraft>): Errors 
   }
   if (keys.includes('age')) {
     if (draft.age === null) errors.age = 'Please add your age.'
-    else if (!Number.isFinite(draft.age) || draft.age < 13 || draft.age > 100)
-      errors.age = 'Enter an age between 13 and 100.'
+    else if (!Number.isInteger(draft.age) || draft.age < 13 || draft.age > 100)
+      errors.age = 'Enter a whole-number age between 13 and 100.'
   }
   if (keys.includes('college') && !draft.college.trim()) errors.college = 'Please add your college.'
   if (keys.includes('course') && !draft.course.trim()) errors.course = 'Please add your course.'
@@ -153,6 +153,11 @@ export function ProfileForm({
     setErrors(validation)
     if (Object.keys(validation).length > 0) return
     setFormError(null)
+    if (step === sections.length - 1) {
+      // Pressing Enter on the final step should finish setup, not do nothing.
+      void save()
+      return
+    }
     setStep((prev) => Math.min(prev + 1, sections.length - 1))
   }
 
@@ -181,6 +186,7 @@ export function ProfileForm({
               type="number"
               min={13}
               max={100}
+              step={1}
               value={draft.age ?? ''}
               onChange={(event) =>
                 update('age', event.target.value === '' ? null : Number(event.target.value))
@@ -238,6 +244,7 @@ export function ProfileForm({
           optional
         >
           <TagInput
+            id="skills"
             value={draft.skills}
             onChange={(next) => update('skills', next)}
             placeholder="React, Public speaking, Figma…"
@@ -250,6 +257,7 @@ export function ProfileForm({
           optional
         >
           <TagInput
+            id="music"
             value={draft.music_interests}
             onChange={(next) => update('music_interests', next)}
             placeholder="Indie, Hip-hop, Lo-fi…"

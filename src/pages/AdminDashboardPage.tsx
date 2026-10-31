@@ -37,6 +37,11 @@ const filters: Array<{ value: Filter; label: string }> = [
   { value: 'admins', label: 'Admins only' },
 ]
 
+// Supabase/PostgREST caps a single response (1000 rows by default), so the
+// directory is fetched in pages to avoid silently hiding members.
+const PAGE_SIZE = 1000
+const MAX_PAGES = 100
+
 function Stat({
   icon: Icon,
   label,
@@ -69,7 +74,10 @@ function Stat({
 
 function csvEscape(value: unknown): string {
   const text = value == null ? '' : String(value)
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  // Guard against spreadsheet formula injection. A leading apostrophe keeps
+  // Excel/Sheets from evaluating user-supplied text as a formula.
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
 export function AdminDashboardPage() {
@@ -91,16 +99,28 @@ export function AdminDashboardPage() {
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) {
-      setLoadError(error.message)
-      setLoading(false)
-      return
+
+    const rows: AdminProfile[] = []
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const from = page * PAGE_SIZE
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) {
+        setLoadError(error.message)
+        setLoading(false)
+        return
+      }
+
+      rows.push(...((data ?? []) as AdminProfile[]))
+      if (!data || data.length < PAGE_SIZE) break
     }
-    setMembers((data ?? []) as AdminProfile[])
+
+    setMembers(rows)
     setLastSynced(new Date().toISOString())
     setLoading(false)
   }, [])
@@ -111,7 +131,7 @@ export function AdminDashboardPage() {
 
   const stats = useMemo(() => {
     const total = members.length
-    const complete = members.filter((member) => member.onboarding_completed).length
+    const complete = members.filter((member) => completion(member) === 100).length
     const admins = members.filter((member) => member.role === 'admin').length
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
     const newThisWeek = members.filter(
@@ -129,8 +149,8 @@ export function AdminDashboardPage() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return members.filter((member) => {
-      if (filter === 'complete' && !member.onboarding_completed) return false
-      if (filter === 'incomplete' && member.onboarding_completed) return false
+      if (filter === 'complete' && completion(member) !== 100) return false
+      if (filter === 'incomplete' && completion(member) === 100) return false
       if (filter === 'admins' && member.role !== 'admin') return false
       if (!needle) return true
       const haystack = [
@@ -186,13 +206,18 @@ export function AdminDashboardPage() {
     )
     const header =
       'Name,Email,Age,College,Course,Skills,Music interests,Bio,Role,Profile complete,Joined'
-    const blob = new Blob([`${header}\n${rows.join('\n')}`], { type: 'text/csv;charset=utf-8;' })
+    // The BOM keeps non-ASCII names readable when the CSV is opened in Excel.
+    const blob = new Blob([`\uFEFF${header}\n${rows.join('\n')}`], {
+      type: 'text/csv;charset=utf-8;',
+    })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `campuscircle-members-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
     link.click()
-    URL.revokeObjectURL(url)
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     toast('success', 'Export started', `${pluralize(filtered.length, 'member')} exported to CSV.`)
   }
 
@@ -525,7 +550,13 @@ export function AdminDashboardPage() {
         onClose={() => {
           if (!editSaving) setEditing(null)
         }}
-        title={editing ? `Edit ${firstName(editing.full_name)}’s profile` : 'Edit profile'}
+        title={
+          editing
+            ? editing.full_name.trim()
+              ? `Edit ${firstName(editing.full_name)}’s profile`
+              : 'Edit member profile'
+            : 'Edit profile'
+        }
         description="Admin changes save directly to this member’s record."
         size="lg"
         footer={

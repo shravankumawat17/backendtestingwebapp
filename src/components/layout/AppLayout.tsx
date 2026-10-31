@@ -105,9 +105,22 @@ export function AppLayout() {
 
   useEffect(() => {
     if (!mobileOpen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false)
+    }
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => {
+      if (desktop.matches) setMobileOpen(false)
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    desktop.addEventListener('change', onChange)
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      desktop.removeEventListener('change', onChange)
       document.body.style.overflow = previous
     }
   }, [mobileOpen])
@@ -123,6 +136,8 @@ export function AppLayout() {
           onClick={() => setMobileOpen(true)}
           className="grid size-9 place-items-center rounded-lg border border-line bg-paper text-ink"
           aria-label="Open navigation"
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-navigation"
         >
           <Menu size={17} />
         </button>
@@ -137,7 +152,13 @@ export function AppLayout() {
             onClick={() => setMobileOpen(false)}
             aria-hidden
           />
-          <div className="relative h-full w-[280px] animate-[pop_0.25s_ease_both] border-r border-line bg-cream shadow-pop">
+          <div
+            id="mobile-navigation"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation"
+            className="relative h-full w-[280px] animate-[pop_0.25s_ease_both] border-r border-line bg-cream shadow-pop"
+          >
             <button
               onClick={() => setMobileOpen(false)}
               className="absolute right-3 top-3 z-10 grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/5 hover:text-ink"

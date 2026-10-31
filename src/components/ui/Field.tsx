@@ -33,6 +33,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   ({ className, invalid, ...props }, ref) => (
     <input
       ref={ref}
+      aria-invalid={invalid || undefined}
       className={clsx(baseInput, 'h-11', invalid && 'border-danger/60', className)}
       {...props}
     />
@@ -46,6 +47,7 @@ export const Textarea = forwardRef<
 >(({ className, invalid, ...props }, ref) => (
   <textarea
     ref={ref}
+    aria-invalid={invalid || undefined}
     className={clsx(baseInput, 'min-h-28 resize-y py-2.5 leading-relaxed', invalid && 'border-danger/60', className)}
     {...props}
   />
@@ -53,11 +55,13 @@ export const Textarea = forwardRef<
 Textarea.displayName = 'Textarea'
 
 export function TagInput({
+  id,
   value,
   onChange,
   placeholder,
   max = 12,
 }: {
+  id?: string
   value: string[]
   onChange: (next: string[]) => void
   placeholder?: string
@@ -82,6 +86,7 @@ export function TagInput({
         </span>
       ))}
       <input
+        id={id}
         type="text"
         className="min-w-28 flex-1 bg-transparent px-1 text-[14px] placeholder:text-muted/60 focus:outline-none"
         placeholder={value.length === 0 ? placeholder : value.length >= max ? 'Limit reached' : 'Add another…'}

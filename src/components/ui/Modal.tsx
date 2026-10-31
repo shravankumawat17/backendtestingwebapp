@@ -1,7 +1,16 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import clsx from 'clsx'
+
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
 
 export function Modal({
   open,
@@ -20,19 +29,65 @@ export function Modal({
   footer?: ReactNode
   size?: 'sm' | 'md' | 'lg'
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    const previous = document.body.style.overflow
+
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const dialog = dialogRef.current
+    const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+
+    const getFocusable = () =>
+      dialog
+        ? Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+            (element) => element.getClientRects().length > 0,
+          )
+        : []
+
+    // Move focus into the dialog so screen readers announce its title and Tab
+    // stays inside the modal.
+    dialog?.focus()
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !dialog) return
+
+      const items = getFocusable()
+      if (items.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+
+      if (event.shiftKey && (active === first || active === dialog || active === null)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || active === dialog)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
-      document.body.style.overflow = previous
+      document.body.style.overflow = previousOverflow
+      if (previouslyFocused?.isConnected) previouslyFocused.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -44,11 +99,13 @@ export function Modal({
         aria-hidden
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className={clsx(
-          'relative z-10 flex max-h-[92vh] w-full animate-pop flex-col overflow-hidden rounded-t-2xl border border-line bg-paper shadow-pop sm:rounded-2xl',
+          'relative z-10 flex max-h-[92vh] w-full animate-pop flex-col overflow-hidden rounded-t-2xl border border-line bg-paper shadow-pop focus:outline-none sm:rounded-2xl',
           size === 'sm' && 'sm:max-w-md',
           size === 'md' && 'sm:max-w-xl',
           size === 'lg' && 'sm:max-w-3xl',
@@ -56,7 +113,9 @@ export function Modal({
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
           <div>
-            <h2 className="font-display text-[22px] leading-tight text-ink">{title}</h2>
+            <h2 id={titleId} className="font-display text-[22px] leading-tight text-ink">
+              {title}
+            </h2>
             {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
           </div>
           <button
